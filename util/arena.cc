@@ -20,6 +20,8 @@ Arena::~Arena() {
   }
 }
 
+//如果bytes超过1k，则直接调用malloc分配内存
+//否则，重新分配一个Block，再返回bytes大小的内存
 char* Arena::AllocateFallback(size_t bytes) {
   if (bytes > kBlockSize / 4) {
     // Object is more than a quarter of our block size.  Allocate it separately
@@ -38,6 +40,7 @@ char* Arena::AllocateFallback(size_t bytes) {
   return result;
 }
 
+// 分配bytes大小的内存空间，起始地址内存对齐（void*）
 char* Arena::AllocateAligned(size_t bytes) {
   const int align = (sizeof(void*) > 8) ? sizeof(void*) : 8;
   assert((align & (align-1)) == 0);   // Pointer size should be a power of 2
@@ -57,6 +60,7 @@ char* Arena::AllocateAligned(size_t bytes) {
   return result;
 }
 
+//分配一个Block的内存，并放入vector中 
 char* Arena::AllocateNewBlock(size_t block_bytes) {
   char* result = new char[block_bytes];
   blocks_.push_back(result);

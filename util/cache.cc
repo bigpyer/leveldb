@@ -398,6 +398,7 @@ class ShardedLRUCache : public Cache {
 
 }  // end anonymous namespace
 
+//创建给定容量的LRUCache
 Cache* NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
 }
