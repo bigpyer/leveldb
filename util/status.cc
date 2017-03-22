@@ -8,6 +8,7 @@
 
 namespace leveldb {
 
+//复制状态字符串
 const char* Status::CopyState(const char* state) {
   uint32_t size;
   memcpy(&size, state, sizeof(size));
@@ -16,6 +17,7 @@ const char* Status::CopyState(const char* state) {
   return result;
 }
 
+//内部构造函数
 Status::Status(Code code, const Slice& msg, const Slice& msg2) {
   assert(code != kOk);
   const uint32_t len1 = msg.size();
@@ -23,7 +25,7 @@ Status::Status(Code code, const Slice& msg, const Slice& msg2) {
   const uint32_t size = len1 + (len2 ? (2 + len2) : 0);
   char* result = new char[size + 5];
   memcpy(result, &size, sizeof(size));
-  result[4] = static_cast<char>(code);
+  result[4] = static_cast<char>(code); //第5个字节存放code
   memcpy(result + 5, msg.data(), len1);
   if (len2) {
     result[5 + len1] = ':';
@@ -33,7 +35,7 @@ Status::Status(Code code, const Slice& msg, const Slice& msg2) {
   state_ = result;
 }
 
-std::string Status::ToString() const {
+std::string Status::ToString() const { //返回状态字符串
   if (state_ == NULL) {
     return "OK";
   } else {

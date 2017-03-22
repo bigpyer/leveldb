@@ -24,12 +24,14 @@ Arena::~Arena() {
 //否则，重新分配一个Block，再返回bytes大小的内存
 char* Arena::AllocateFallback(size_t bytes) {
   if (bytes > kBlockSize / 4) {
+    // 当请求超过1k时直接分配，以免造成每次Block剩余内存不能利用，产生碎片
     // Object is more than a quarter of our block size.  Allocate it separately
     // to avoid wasting too much space in leftover bytes.
     char* result = AllocateNewBlock(bytes);
     return result;
   }
 
+  // 每个Block剩余的bytes不够时，产生浪费
   // We waste the remaining space in the current block.
   alloc_ptr_ = AllocateNewBlock(kBlockSize);
   alloc_bytes_remaining_ = kBlockSize;

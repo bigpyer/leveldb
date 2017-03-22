@@ -11,6 +11,8 @@
 // external synchronization, but if any of the threads may call a
 // non-const method, all threads accessing the same Slice must use
 // external synchronization.
+// 为什么使用Slice而不是std::string ??
+// 1.相比返回string，返回Slice的开销会小的多(1.没有拷贝，Slice中没有实际的数据，只有指向数据的指针，开销低 2.leveldb允许key和value包含'\0',不能返回以null结尾的c风格字符串)
 
 #ifndef STORAGE_LEVELDB_INCLUDE_SLICE_H_
 #define STORAGE_LEVELDB_INCLUDE_SLICE_H_
@@ -25,6 +27,7 @@ namespace leveldb {
 class Slice {
  public:
   // Create an empty slice.
+  // 创建一个空的Slice
   Slice() : data_(""), size_(0) { }
 
   // Create a slice that refers to d[0,n-1].
@@ -63,6 +66,7 @@ class Slice {
   }
 
   // Return a string that contains the copy of the referenced data.
+  // 转成c++风格的string
   std::string ToString() const { return std::string(data_, size_); }
 
   // Three-way comparison.  Returns value:
@@ -72,6 +76,7 @@ class Slice {
   int compare(const Slice& b) const;
 
   // Return true iff "x" is a prefix of "*this"
+  // *this是否以Slice x为首
   bool starts_with(const Slice& x) const {
     return ((size_ >= x.size_) &&
             (memcmp(data_, x.data_, x.size_) == 0));
@@ -80,10 +85,12 @@ class Slice {
  private:
   const char* data_;
   size_t size_;
+  // 拷贝构造函数及=操作符重载没写，采用默认的操作(直接赋值)
 
-  // Intentionally copyable
+  // Intentionally copyable 有意可拷贝
 };
 
+// Slice ==运算符重载
 inline bool operator==(const Slice& x, const Slice& y) {
   return ((x.size() == y.size()) &&
           (memcmp(x.data(), y.data(), x.size()) == 0));
@@ -93,6 +100,7 @@ inline bool operator!=(const Slice& x, const Slice& y) {
   return !(x == y);
 }
 
+//Slice 比较函数
 inline int Slice::compare(const Slice& b) const {
   const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
   int r = memcmp(data_, b.data_, min_len);

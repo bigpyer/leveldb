@@ -95,7 +95,7 @@ class SkipList {
   };
 
  private:
-  enum { kMaxHeight = 12 };
+  enum { kMaxHeight = 12 }; //最大层数
 
   // Immutable after construction
   Comparator const compare_;
@@ -105,7 +105,7 @@ class SkipList {
 
   // Modified only by Insert().  Read racily by readers, but stale
   // values are ok.
-  port::AtomicPointer max_height_;   // Height of the entire list
+  port::AtomicPointer max_height_;   // Height of the entire list 当前跳表层数
 
   inline int GetMaxHeight() const {
     return static_cast<int>(
@@ -113,9 +113,9 @@ class SkipList {
   }
 
   // Read/written only by Insert().
-  Random rnd_;
+  Random rnd_; //随机器，产生随机的level层数
 
-  Node* NewNode(const Key& key, int height);
+  Node* NewNode(const Key& key, int height); // 新建一个level=height，键位为key的节点
   int RandomHeight();
   bool Equal(const Key& a, const Key& b) const { return (compare_(a, b) == 0); }
 

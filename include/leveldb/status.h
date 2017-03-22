@@ -9,6 +9,7 @@
 // external synchronization, but if any of the threads may call a
 // non-const method, all threads accessing the same Status must use
 // external synchronization.
+// leveldb将错误号和错误信息封装成Status类,来统一进行处理
 
 #ifndef STORAGE_LEVELDB_INCLUDE_STATUS_H_
 #define STORAGE_LEVELDB_INCLUDE_STATUS_H_
@@ -21,10 +22,12 @@ namespace leveldb {
 class Status {
  public:
   // Create a success status.
+  // 构造函数，默认为success
   Status() : state_(NULL) { }
   ~Status() { delete[] state_; }
 
   // Copy the specified status.
+  // 拷贝构造函数和赋值操作符
   Status(const Status& s);
   void operator=(const Status& s);
 
@@ -76,6 +79,7 @@ class Status {
   //    state_[0..3] == length of message
   //    state_[4]    == code
   //    state_[5..]  == message
+  //    为了节省空间，Statsu并没有用std::string来存储错误信息，而是将返回码(Code),错误信息msg及长度打包存储于一个字符串数组中
   const char* state_;
 
   enum Code {
@@ -87,11 +91,11 @@ class Status {
     kIOError = 5
   };
 
-  Code code() const {
+  Code code() const { //返回状态码
     return (state_ == NULL) ? kOk : static_cast<Code>(state_[4]);
   }
 
-  Status(Code code, const Slice& msg, const Slice& msg2);
+  Status(Code code, const Slice& msg, const Slice& msg2); //内部构造函数
   static const char* CopyState(const char* s);
 };
 

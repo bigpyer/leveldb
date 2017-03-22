@@ -50,6 +50,7 @@ class Arena {
   port::AtomicPointer memory_usage_;
 
   // No copying allowed
+  // 将拷贝构造函数及赋值构造函数设置为private，表示不运行此2个操作
   Arena(const Arena&);
   void operator=(const Arena&);
 };
