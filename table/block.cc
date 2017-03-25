@@ -75,10 +75,10 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
 
 class Block::Iter : public Iterator {
  private:
-  const Comparator* const comparator_;
-  const char* const data_;      // underlying block contents
-  uint32_t const restarts_;     // Offset of restart array (list of fixed32)
-  uint32_t const num_restarts_; // Number of uint32_t entries in restart array
+  const Comparator* const comparator_; //key比较器
+  const char* const data_;      // block内容 underlying block contents
+  uint32_t const restarts_;     // 重启点数组在data中的偏移 Offset of restart array (list of fixed32)
+  uint32_t const num_restarts_; // 重启点个数 Number of uint32_t entries in restart array
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
   uint32_t current_;
@@ -224,7 +224,7 @@ class Block::Iter : public Iterator {
   }
 
   bool ParseNextKey() {
-    current_ = NextEntryOffset();
+    current_ = NextEntryOffset(); //(value_.data() + value_.size()) - data
     const char* p = data_ + current_;
     const char* limit = data_ + restarts_;  // Restarts come right after data
     if (p >= limit) {

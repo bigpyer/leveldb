@@ -92,6 +92,7 @@ class SkipList {
     const SkipList* list_;
     Node* node_;
     // Intentionally copyable
+    // 允许拷贝构造和赋值操作
   };
 
  private:

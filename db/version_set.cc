@@ -224,6 +224,7 @@ static Iterator* GetFileIterator(void* arg,
   }
 }
 
+//LevelFileNumIterator (Index)Block::Iter (Data)Block::Iter
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
   return NewTwoLevelIterator(

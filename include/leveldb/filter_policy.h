@@ -46,6 +46,7 @@ class FilterPolicy {
   // the key was in the list of keys passed to CreateFilter().
   // This method may return true or false if the key was not on the
   // list, but it should aim to return false with a high probability.
+  // 如果key在list中必须返回true，如果key不在list中有可能返回true，也有可能返回false，但是会尽最大努力返回false，减少误判
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const = 0;
 };
 

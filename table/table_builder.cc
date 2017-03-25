@@ -18,17 +18,17 @@
 namespace leveldb {
 
 struct TableBuilder::Rep {
-  Options options;
-  Options index_block_options;
-  WritableFile* file;
-  uint64_t offset;
+  Options options; // data blokc的选项
+  Options index_block_options; // index block的选项
+  WritableFile* file; // sstable文件
+  uint64_t offset; // 要写入data block在sstable文件中的偏移，初始0
   Status status;
-  BlockBuilder data_block;
-  BlockBuilder index_block;
-  std::string last_key;
-  int64_t num_entries;
+  BlockBuilder data_block; // 当前操作的data block
+  BlockBuilder index_block; //sstable的index block
+  std::string last_key; // 当前data block最后的k/v对的key
+  int64_t num_entries; //当前data block的个数，初始0
   bool closed;          // Either Finish() or Abandon() has been called.
-  FilterBlockBuilder* filter_block;
+  FilterBlockBuilder* filter_block; // 根据filter数据快速定位key是否在block中
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
@@ -42,7 +42,7 @@ struct TableBuilder::Rep {
   bool pending_index_entry;
   BlockHandle pending_handle;  // Handle to add to index block
 
-  std::string compressed_output;
+  std::string compressed_output; // 压缩后的data block信息，临时存储，写入后即被清空
 
   Rep(const Options& opt, WritableFile* f)
       : options(opt),
@@ -179,14 +179,14 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
   r->status = r->file->Append(block_contents);
-  if (r->status.ok()) {
+  if (r->status.ok()) { // 写入1byte的type和4bytes的crc32
     char trailer[kBlockTrailerSize];
     trailer[0] = type;
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
     EncodeFixed32(trailer+1, crc32c::Mask(crc));
     r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
-    if (r->status.ok()) {
+    if (r->status.ok()) {// 写入成功更新offset-下一个data block的写入偏移
       r->offset += block_contents.size() + kBlockTrailerSize;
     }
   }

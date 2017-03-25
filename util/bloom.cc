@@ -50,10 +50,10 @@ class BloomFilterPolicy : public FilterPolicy {
     for (int i = 0; i < n; i++) {
       // Use double-hashing to generate a sequence of hash values.
       // See analysis in [Kirsch,Mitzenmacher 2006].
-      uint32_t h = BloomHash(keys[i]);
-      const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
-      for (size_t j = 0; j < k_; j++) {
-        const uint32_t bitpos = h % bits;
+      uint32_t h = BloomHash(keys[i]); //h1函数
+      const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits h2函数，由h1 Rotate right 17 bits
+      for (size_t j = 0; j < k_; j++) { // double-hashing生产k_个hash值
+        const uint32_t bitpos = h % bits; // 在bits array上设置第bitpos位
         array[bitpos/8] |= (1 << (bitpos % 8));
         h += delta;
       }
@@ -80,7 +80,7 @@ class BloomFilterPolicy : public FilterPolicy {
     const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
     for (size_t j = 0; j < k; j++) {
       const uint32_t bitpos = h % bits;
-      if ((array[bitpos/8] & (1 << (bitpos % 8))) == 0) return false;
+      if ((array[bitpos/8] & (1 << (bitpos % 8))) == 0) return false; //只要有一个结果对应的bit位为0,就认为不匹配，否则认为匹配
       h += delta;
     }
     return true;
