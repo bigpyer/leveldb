@@ -81,6 +81,7 @@ class Footer {
 static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
 
 // 1-byte type + 32-bit crc
+// type: none或者snappy压缩
 static const size_t kBlockTrailerSize = 5;
 
 struct BlockContents {
