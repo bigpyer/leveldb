@@ -27,10 +27,10 @@ class Block {
  private:
   uint32_t NumRestarts() const;
 
-  const char* data_;
-  size_t size_;
-  uint32_t restart_offset_;     // Offset in data_ of restart array
-  bool owned_;                  // Block owns data_[]
+  const char* data_; //block数据指针
+  size_t size_; //block数据大小
+  uint32_t restart_offset_;     // 重启点数组在data_中的偏移 Offset in data_ of restart array
+  bool owned_;                  // data_是否是Block拥有的 Block owns data_[]
 
   // No copying allowed
   Block(const Block&);

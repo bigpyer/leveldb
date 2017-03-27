@@ -40,7 +40,7 @@ struct TableBuilder::Rep {
   //
   // Invariant: r->pending_index_entry is true only if data_block is empty.
   bool pending_index_entry;
-  BlockHandle pending_handle;  // Handle to add to index block
+  BlockHandle pending_handle;  // 添加到index block的data block的信息 Handle to add to index block
 
   std::string compressed_output; // 压缩后的data block信息，临时存储，写入后即被清空
 
@@ -89,6 +89,7 @@ Status TableBuilder::ChangeOptions(const Options& options) {
   return Status::OK();
 }
 
+//首先保证文件没有close，也就是没有调用Finish/Abandon，以及保证当前status是ok的；如果当前有缓存的kv对，保证新加入的key是最大的。
 void TableBuilder::Add(const Slice& key, const Slice& value) {
   Rep* r = rep_;
   assert(!r->closed);
@@ -97,19 +98,20 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
 
-  if (r->pending_index_entry) {
+  if (r->pending_index_entry) { //表明遇到下一个data block的第一个kv对，根据key调整r->last_key，这是通过Comparator的FindShortestSeprator完成的
     assert(r->data_block.empty());
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
     r->pending_handle.EncodeTo(&handle_encoding);
-    r->index_block.Add(r->last_key, Slice(handle_encoding));
+    r->index_block.Add(r->last_key, Slice(handle_encoding)); //将pending_handle加入到index block中，最后将r->pending_index_entry设置为false。
     r->pending_index_entry = false;
-  }
+  }//直到遇到下一个data block的第一个key时，我们才会为上一个data block生成index entry，这样的好处是可以为index使用较短的key;比如上一个data block最后一个k/v的key是"the quick brown fox"，其后继data block的第一个key是"the who"，我们就可以用一个较短的字符串"the r"作为上一个data block的index block entry的key。
 
-  if (r->filter_block != NULL) {
+  if (r->filter_block != NULL) { //如果filter 不为空，就把key加入到filter block中
     r->filter_block->AddKey(key);
   }
 
+  //设置r->last_key = key，将(key, value)添加到r->data_block中，并更新entry数。
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
   r->data_block.Add(key, value);
@@ -120,18 +122,23 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
+//首先保证未关闭，且状态ok
 void TableBuilder::Flush() {
   Rep* r = rep_;
   assert(!r->closed);
   if (!ok()) return;
-  if (r->data_block.empty()) return;
+  if (r->data_block.empty()) return; // data block是空的
+  //保证pending_index_entry为false，即data block的Add已经完成
   assert(!r->pending_index_entry);
+  // 写入data block，并设置其index entry信息—BlockHandle对象
   WriteBlock(&r->data_block, &r->pending_handle);
+  //写入成功，则Flush文件，并设置r->pending_index_entry为true，  
+  //以根据下一个data block的first key调整index entry的key—即r->last_key  
   if (ok()) {
     r->pending_index_entry = true;
     r->status = r->file->Flush();
   }
-  if (r->filter_block != NULL) {
+  if (r->filter_block != NULL) { ////将data block在sstable中的偏移加入到filter block中,并指明开始新的data block
     r->filter_block->StartBlock(r->offset);
   }
 }
@@ -143,17 +150,17 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   //    crc: uint32
   assert(ok());
   Rep* r = rep_;
-  Slice raw = block->Finish();
+  Slice raw = block->Finish(); // 获得data block的序列化字符串
 
   Slice block_contents;
   CompressionType type = r->options.compression;
   // TODO(postrelease): Support more compression options: zlib?
   switch (type) {
-    case kNoCompression:
+    case kNoCompression: //不压缩
       block_contents = raw;
       break;
 
-    case kSnappyCompression: {
+    case kSnappyCompression: { //snappy压缩格式
       std::string* compressed = &r->compressed_output;
       if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
           compressed->size() < raw.size() - (raw.size() / 8u)) {
@@ -161,12 +168,14 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
       } else {
         // Snappy not supported, or compressed less than 12.5%, so just
         // store uncompressed form
+        // 如果不支持Snappy，或者压缩率低于12.5%，依然当作不压缩存储
         block_contents = raw;
         type = kNoCompression;
       }
       break;
     }
   }
+  //将data内容写入到文件，并重置block成初始化状态，清空compressedoutput。
   WriteRawBlock(block_contents, type, handle);
   r->compressed_output.clear();
   block->Reset();
@@ -176,9 +185,9 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
                                  CompressionType type,
                                  BlockHandle* handle) {
   Rep* r = rep_;
-  handle->set_offset(r->offset);
+  handle->set_offset(r->offset); //为index设置data block的handle信息
   handle->set_size(block_contents.size());
-  r->status = r->file->Append(block_contents);
+  r->status = r->file->Append(block_contents); //写入data block 内容
   if (r->status.ok()) { // 写入1byte的type和4bytes的crc32
     char trailer[kBlockTrailerSize];
     trailer[0] = type;
@@ -196,7 +205,9 @@ Status TableBuilder::status() const {
   return rep_->status;
 }
 
+//调用Finish函数，表明调用者将所有已经添加的k/v对持久化到sstable，并关闭sstable文件。
 Status TableBuilder::Finish() {
+  //首先调用Flush，写入最后的一块data block，然后设置关闭标志closed=true。表明该sstable已经关闭，不能再添加k/v对。
   Rep* r = rep_;
   Flush();
   assert(!r->closed);
@@ -205,16 +216,19 @@ Status TableBuilder::Finish() {
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
   // Write filter block
+  // 写入filter block到文件中
   if (ok() && r->filter_block != NULL) {
     WriteRawBlock(r->filter_block->Finish(), kNoCompression,
                   &filter_block_handle);
   }
 
   // Write metaindex block
+  // 写入meta index block到文件中
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
     if (r->filter_block != NULL) {
       // Add mapping from "filter.Name" to location of filter data
+      //加入从"filter.Name"到filter data位置的映射
       std::string key = "filter.";
       key.append(r->options.filter_policy->Name());
       std::string handle_encoding;
@@ -227,6 +241,7 @@ Status TableBuilder::Finish() {
   }
 
   // Write index block
+  // 写入index block，如果成功Flush过data block，那么需要为最后一块data block设置index block，并加入到index block中。
   if (ok()) {
     if (r->pending_index_entry) {
       r->options.comparator->FindShortSuccessor(&r->last_key);
@@ -239,6 +254,7 @@ Status TableBuilder::Finish() {
   }
 
   // Write footer
+  // 写入footer
   if (ok()) {
     Footer footer;
     footer.set_metaindex_handle(metaindex_block_handle);

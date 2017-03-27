@@ -52,6 +52,14 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
+  //首先比较user_key,基于用户设置的comparator，如果user key不相等直接返回比较结果；
+  //由此可见其排序比较依据依次是：
+  //
+  //1 首先根据user key按升序排列
+  //
+  //2 然后根据sequence number按降序排列
+  //
+  //3 最后根据value type按降序排列
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
   if (r == 0) {
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
@@ -69,11 +77,14 @@ void InternalKeyComparator::FindShortestSeparator(
       std::string* start,
       const Slice& limit) const {
   // Attempt to shorten the user portion of the key
+  // 尝试更新user key，基于指定的user comparator
   Slice user_start = ExtractUserKey(*start);
   Slice user_limit = ExtractUserKey(limit);
   std::string tmp(user_start.data(), user_start.size());
   user_comparator_->FindShortestSeparator(&tmp, user_limit);
   if (tmp.size() < user_start.size() &&
+    // user key在物理上长度变短了，但其逻辑值变大了.生产新的*start时，  
+    // 使用最大的sequence number，以保证排在相同user key记录序列的第一个
       user_comparator_->Compare(user_start, tmp) < 0) {
     // User key has become shorter physically, but larger logically.
     // Tack on the earliest possible number to the shortened user key.

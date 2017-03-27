@@ -41,11 +41,11 @@ BlockBuilder::BlockBuilder(const Options* options)
       restarts_(),
       counter_(0),
       finished_(false) {
-  assert(options->block_restart_interval >= 1);
+  assert(options->block_restart_interval >= 1); //每隔几个key就直接存储一个重启点key
   restarts_.push_back(0);       // First restart point is at offset 0
 }
 
-void BlockBuilder::Reset() {
+void BlockBuilder::Reset() { // 重设内容，通常在Finish之后调用已构建新的block
   buffer_.clear();
   restarts_.clear();
   restarts_.push_back(0);       // First restart point is at offset 0
@@ -54,22 +54,26 @@ void BlockBuilder::Reset() {
   last_key_.clear();
 }
 
+//buffer大小+重启点数组长度+重启点长度
 size_t BlockBuilder::CurrentSizeEstimate() const {
   return (buffer_.size() +                        // Raw data buffer
           restarts_.size() * sizeof(uint32_t) +   // Restart array
           sizeof(uint32_t));                      // Restart array length
 }
 
+//结束构建Block，并返回指向block内容的指针
 Slice BlockBuilder::Finish() {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
-    PutFixed32(&buffer_, restarts_[i]);
+    PutFixed32(&buffer_, restarts_[i]); //重启点
   }
-  PutFixed32(&buffer_, restarts_.size());
+  PutFixed32(&buffer_, restarts_.size()); //重启点数量
   finished_ = true;
   return Slice(buffer_);
 }
 
+//添加k/v，要求: Reset之后没有掉用过Finish(),key>任何已经加入的key
+//TODO 保证新加入的key > 已加入的任何一个key?
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
@@ -77,25 +81,28 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(buffer_.empty() // No values yet?
          || options_->comparator->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
-  if (counter_ < options_->block_restart_interval) {
+  if (counter_ < options_->block_restart_interval) { //前缀压缩
     // See how much sharing to do with previous string
+    // 计算key与last_key的公共前缀
     const size_t min_length = std::min(last_key_piece.size(), key.size());
     while ((shared < min_length) && (last_key_piece[shared] == key[shared])) {
       shared++;
     }
-  } else {
+  } else { //新的重启点
     // Restart compression
     restarts_.push_back(buffer_.size());
     counter_ = 0;
   }
-  const size_t non_shared = key.size() - shared;
+  const size_t non_shared = key.size() - shared; //key前缀之后的字符串长度
 
   // Add "<shared><non_shared><value_size>" to buffer_
+  // append "<shared><non_shared><value_size>"到buffer_中
   PutVarint32(&buffer_, shared);
   PutVarint32(&buffer_, non_shared);
   PutVarint32(&buffer_, value.size());
 
   // Add string delta to buffer_ followed by value
+  // 前缀之后的字符串+value
   buffer_.append(key.data() + shared, non_shared);
   buffer_.append(value.data(), value.size());
 

@@ -277,6 +277,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
+  // 创建目录，目录以db name命名，忽略任何创建错误，然后尝试获取db name/LOCK文件锁，失败则返回。
   env_->CreateDir(dbname_);
   assert(db_lock_ == NULL);
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);

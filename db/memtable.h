@@ -45,11 +45,13 @@ class MemTable {
   // while the returned iterator is live.  The keys returned by this
   // iterator are internal keys encoded by AppendInternalKey in the
   // db/format.{h,cc} module.
+  // 返回一个迭代器，可以遍历访问table的内部数据，这种方式隐藏了table的内部实现，外部调用这必须保证Iterator访问Memtable的时候该Memtable是活的。
   Iterator* NewIterator();
 
   // Add an entry into memtable that maps key to value at the
   // specified sequence number and with the specified type.
   // Typically value will be empty if type==kTypeDeletion.
+  // delete即为插入一条类型为kTypeDeletion的记录
   void Add(SequenceNumber seq, ValueType type,
            const Slice& key,
            const Slice& value);

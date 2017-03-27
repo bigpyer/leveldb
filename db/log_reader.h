@@ -62,15 +62,18 @@ class Reader {
   Reporter* const reporter_;
   bool const checksum_;
   char* const backing_store_;
-  Slice buffer_;
-  bool eof_;   // Last Read() indicated EOF by returning < kBlockSize
+  Slice buffer_; //读取到的内容
+  bool eof_;   // 上次Read()返回长度< kBlockSize，暗示到了文件结尾EOF Last Read() indicated EOF by returning < kBlockSize
 
   // Offset of the last record returned by ReadRecord.
+  // 函数ReadRecord返回的上一个record的偏移
   uint64_t last_record_offset_;
   // Offset of the first location past the end of buffer_.
+  // 当前的读取偏移
   uint64_t end_of_buffer_offset_;
 
   // Offset at which to start looking for the first record to return
+  // 偏移，从哪里开始读取第一条record
   uint64_t const initial_offset_;
 
   // True if we are resynchronizing after a seek (initial_offset_ > 0). In

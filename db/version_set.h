@@ -89,6 +89,9 @@ class Version {
   void Ref();
   void Unref();
 
+  // 如果指定level中的某些文件和[*smallest_user_key,*largest_user_key]有重合就返回true。  
+  // @smallest_user_key==NULL表示比DB中所有key都小的key.  
+  // @largest_user_key==NULL表示比DB中所有key都大的key. 
   void GetOverlappingInputs(
       int level,
       const InternalKey* begin,         // NULL means before all keys
@@ -135,15 +138,17 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  std::vector<FileMetaData*> files_[config::kNumLevels];
+  std::vector<FileMetaData*> files_[config::kNumLevels]; // sstable文件列表
 
   // Next file to compact based on seek stats.
-  FileMetaData* file_to_compact_;
+  FileMetaData* file_to_compact_; // 下一个要compact的文件
   int file_to_compact_level_;
 
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
+  // 下一个应该compact的level和compaction分数
+  // 分数 < 1说明compaction并不紧迫，这些字段在finilize()中初始化
   double compaction_score_;
   int compaction_level_;
 

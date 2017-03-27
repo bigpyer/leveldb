@@ -87,6 +87,9 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   //  key bytes    : char[internal_key.size()]
   //  value_size   : varint32 of value.size()
   //  value bytes  : char[value.size()]
+  //  | VarInt(Internal Key size) len | internal key |VarInt(value) len |value|
+  //  internal key = |user key |sequence number |type |
+  //  Internal key size = key size + 8
   size_t key_size = key.size();
   size_t val_size = value.size();
   size_t internal_key_size = key_size + 8;
@@ -108,7 +111,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
-  iter.Seek(memkey.data());
+  iter.Seek(memkey.data()); // seek到value>=memkey.data()的第一个记录
   if (iter.Valid()) {
     // entry format is:
     //    klength  varint32
@@ -122,6 +125,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     const char* entry = iter.key();
     uint32_t key_length;
     const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
+    //比较user key是否相等
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8),
             key.user_key()) == 0) {

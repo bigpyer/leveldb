@@ -30,6 +30,7 @@ class BytewiseComparatorImpl : public Comparator {
       std::string* start,
       const Slice& limit) const {
     // Find length of common prefix
+    // 首先计算共同前缀字符串长度
     size_t min_length = std::min(start->size(), limit.size());
     size_t diff_index = 0;
     while ((diff_index < min_length) &&
@@ -39,7 +40,9 @@ class BytewiseComparatorImpl : public Comparator {
 
     if (diff_index >= min_length) {
       // Do not shorten if one string is a prefix of the other
+      // 说明*start是limit的前缀，或者反之，此时不做修改，直接返回
     } else {
+      // 尝试执行字符start[diff_index]++,设置start长度为diff_index+1，并返回++条件: 字符< oxff 并且字符+1 < limit上该index的字符
       uint8_t diff_byte = static_cast<uint8_t>((*start)[diff_index]);
       if (diff_byte < static_cast<uint8_t>(0xff) &&
           diff_byte + 1 < static_cast<uint8_t>(limit[diff_index])) {

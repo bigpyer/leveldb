@@ -1,6 +1,7 @@
 // Copyright (c) 2011 The LevelDB Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
+// Version是管理某个版本的所有sstable的类，就其导出接口而言，无非是遍历sstable，查找k/v。以及为compaction做些事情，给定range，检查重叠情况。而它不会修改它管理的sstable这些文件，对这些文件而言它是只读操作接口。
 
 #include "db/version_set.h"
 
@@ -127,19 +128,21 @@ bool SomeFileOverlapsRange(
   const Comparator* ucmp = icmp.user_comparator();
   if (!disjoint_sorted_files) {
     // Need to check against all files
+    // 乱序，可能相交的文件集合，依次查找
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       if (AfterFile(ucmp, smallest_user_key, f) ||
           BeforeFile(ucmp, largest_user_key, f)) {
         // No overlap
       } else {
-        return true;  // Overlap
+        return true;  // 有重合 Overlap
       }
     }
     return false;
   }
 
   // Binary search over file list
+  // 有序&互不相交，直接二分查找
   uint32_t index = 0;
   if (smallest_user_key != NULL) {
     // Find the earliest possible internal key for smallest_user_key
@@ -147,8 +150,8 @@ bool SomeFileOverlapsRange(
     index = FindFile(icmp, files, small.Encode());
   }
 
-  if (index >= files.size()) {
-    // beginning of range is after all files, so no overlap.
+  if (index >= files.size()) { // 不存在比smallest_user_key小的key
+    // beginning of range is after all files, so no overlap. 保证在largest_user_key之后
     return false;
   }
 
@@ -163,7 +166,7 @@ bool SomeFileOverlapsRange(
 class Version::LevelFileNumIterator : public Iterator {
  public:
   LevelFileNumIterator(const InternalKeyComparator& icmp,
-                       const std::vector<FileMetaData*>* flist)
+                       const std::vector<FileMetaData*>* flist//指向version的所有sstable文件列表)
       : icmp_(icmp),
         flist_(flist),
         index_(flist->size()) {        // Marks as invalid
@@ -190,7 +193,7 @@ class Version::LevelFileNumIterator : public Iterator {
       index_--;
     }
   }
-  Slice key() const {
+  Slice key() const { // 返回文件中所包含的最大key，value()返回的是|file number(8bytes)|file size(8 bytes)|串.
     assert(Valid());
     return (*flist_)[index_]->largest.Encode();
   }
@@ -219,8 +222,8 @@ static Iterator* GetFileIterator(void* arg,
         Status::Corruption("FileReader invoked with unexpected value"));
   } else {
     return cache->NewIterator(options,
-                              DecodeFixed64(file_value.data()),
-                              DecodeFixed64(file_value.data() + 8));
+                              DecodeFixed64(file_value.data()), // filenumber
+                              DecodeFixed64(file_value.data() + 8)); // filesize
   }
 }
 
@@ -235,6 +238,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
+  // 对于level=0级别的sstable文件，直接装入cache，level0的sstable文件可能有重合，需要merge
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
         vset_->table_cache_->NewIterator(
@@ -244,6 +248,7 @@ void Version::AddIterators(const ReadOptions& options,
   // For levels > 0, we can use a concatenating iterator that sequentially
   // walks through the non-overlapping files in the level, opening them
   // lazily.
+  // 对于level>0级别的sstable文件，lazy open机制，他们不会有重叠。
   for (int level = 1; level < config::kNumLevels; level++) {
     if (!files_[level].empty()) {
       iters->push_back(NewConcatenatingIterator(options, level));
@@ -351,36 +356,40 @@ Status Version::Get(const ReadOptions& options,
   FileMetaData* tmp2;
   for (int level = 0; level < config::kNumLevels; level++) {
     size_t num_files = files_[level].size();
-    if (num_files == 0) continue;
+    if (num_files == 0) continue; // 本层没有文件，则直接跳过
 
     // Get the list of files to search in this level
+    // // 取得level下的所有sstable文件列表，搜索本层
     FileMetaData* const* files = &files_[level][0];
     if (level == 0) {
       // Level-0 files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
+      // 对于level 0，文件有可能重叠，找到所有和user_key有重叠的文件，然后根据时间顺序从最新的文件依次处理
       tmp.reserve(num_files);
-      for (uint32_t i = 0; i < num_files; i++) {
+      for (uint32_t i = 0; i < num_files; i++) { // 遍历level 0下的所有sstable文件
         FileMetaData* f = files[i];
         if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
             ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
-          tmp.push_back(f);
+          tmp.push_back(f); // sstable文件有user_key，有重叠
         }
       }
       if (tmp.empty()) continue;
 
-      std::sort(tmp.begin(), tmp.end(), NewestFirst);
+      std::sort(tmp.begin(), tmp.end(), NewestFirst); // 排序
       files = &tmp[0];
-      num_files = tmp.size();
+      num_files = tmp.size(); // 指向tmp指针和大小
     } else {
       // Binary search to find earliest index whose largest key >= ikey.
+      // 二分查找，找到第一个largest key >= ikey的file index
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-      if (index >= num_files) {
+      if (index >= num_files) { // 未找到，文件不存在
         files = NULL;
         num_files = 0;
       } else {
         tmp2 = files[index];
         if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
           // All of "tmp2" is past any data for user_key
+          // 找到的文件其所有的key都大于user_key,等于文件不存在
           files = NULL;
           num_files = 0;
         } else {
@@ -390,15 +399,19 @@ Status Version::Get(const ReadOptions& options,
       }
     }
 
+    // 遍历找到的文件，存在files中，其个数为num_files
+    // 后面的逻辑都在这一层循环中，只要在某个文件中找到了kv对，就跳出for循环。
+    // 如果本次读取不止搜索了一个文件，记录之，这仅会发生在level 0的情况下。
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != NULL && stats->seek_file == NULL) {
         // We have had more than one seek for this read.  Charge the 1st file.
+        // 本次读取不止seek了一个文件，记录第一个
         stats->seek_file = last_file_read;
         stats->seek_file_level = last_file_read_level;
       }
 
       FileMetaData* f = files[i];
-      last_file_read = f;
+      last_file_read = f; // 记录本次读取的level和file
       last_file_read_level = level;
 
       Saver saver;
@@ -412,7 +425,7 @@ Status Version::Get(const ReadOptions& options,
         return s;
       }
       switch (saver.state) {
-        case kNotFound:
+        case kNotFound: //根据saver的状态判断，如果是Not Found则向下搜索下一个更早的sstable文件，其它值则返回。
           break;      // Keep searching in other files
         case kFound:
           return s;
@@ -429,6 +442,8 @@ Status Version::Get(const ReadOptions& options,
   return Status::NotFound(Slice());  // Use an empty error message for speed
 }
 
+//Stat表明在指定key range查找key时，都要先seek此文件，才能在后续的sstable文件中找到key。
+//该函数是将stat记录的sstable文件的allowed_seeks减1，减到0就执行compaction。也就是说如果文件被seek的次数超过了限制，表明读取效率已经很低，需要执行compaction了。所以说allowed_seeks是对compaction流程的有一个优化。
 bool Version::UpdateStats(const GetStats& stats) {
   FileMetaData* f = stats.seek_file;
   if (f != NULL) {
@@ -493,6 +508,7 @@ void Version::Unref() {
   }
 }
 
+//检查是否和指定level的文件有重合，该函数直接调用了SomeFileOverlapsRange()
 bool Version::OverlapInLevel(int level,
                              const Slice* smallest_user_key,
                              const Slice* largest_user_key) {
@@ -504,15 +520,16 @@ int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
     const Slice& largest_user_key) {
   int level = 0;
-  if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
+  if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) { // level0无重合
     // Push to next level if there is no overlap in next level,
     // and the #bytes overlapping in the level after that are limited.
+    // 如果下一层没有重叠，就压到下一曾
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
     while (level < config::kMaxMemCompactLevel) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
-        break;
+        break; // 检查level+1层，有重叠就跳出循环
       }
       if (level + 2 < config::kNumLevels) {
         // Check that file does not overlap too many grandparent bytes.
@@ -529,6 +546,7 @@ int Version::PickLevelForMemTableOutput(
 }
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]
+// 在指定level文件中找出和[begin,end]有重合的sstable文件
 void Version::GetOverlappingInputs(
     int level,
     const InternalKey* begin,
@@ -553,9 +571,11 @@ void Version::GetOverlappingInputs(
       // "f" is completely before specified range; skip it
     } else if (end != NULL && user_cmp->Compare(file_start, user_end) > 0) {
       // "f" is completely after specified range; skip it
-    } else {
+    } else { 
+      // 有重合,记录
       inputs->push_back(f);
       if (level == 0) {
+        //当在level 0中找到有sstable文件和[begin, end]重合时，会相应的将begin/end扩展到文件的min key/max key，然后重新开始搜索。
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
         if (begin != NULL && user_cmp->Compare(file_start, user_begin) < 0) {
@@ -818,6 +838,7 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_->prev_ = v;
 }
 
+//在current version上应用指定的VersionEdit，生成新的MANIFEST信息，保存到磁盘上，并用作current version
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
@@ -912,6 +933,7 @@ Status VersionSet::Recover(bool *save_manifest) {
   };
 
   // Read "CURRENT" file, which contains a pointer to the current manifest file
+  // 根据CURRENT指定的MANIFEST，读取db元信息
   std::string current;
   Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
   if (!s.ok()) {
@@ -1056,6 +1078,7 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
   return true;
 }
 
+//标记指定的文件编号已经使用了
 void VersionSet::MarkFileNumberUsed(uint64_t number) {
   if (next_file_number_ <= number) {
     next_file_number_ = number + 1;
@@ -1151,6 +1174,7 @@ const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   return scratch->buffer;
 }
 
+//对于@v中的@key，返回db中的大概位置
 uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   uint64_t result = 0;
   for (int level = 0; level < config::kNumLevels; level++) {

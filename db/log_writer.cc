@@ -40,12 +40,14 @@ Status Writer::AddRecord(const Slice& slice) {
   // Fragment the record if necessary and emit it.  Note that if slice
   // is empty, we still want to iterate once to emit a single
   // zero-length record
+  // 初始化begin=true，表明是第一条log record
   Status s;
   bool begin = true;
   do {
     const int leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
     if (leftover < kHeaderSize) {
+      // 当前block<7，补位，并重置block偏移
       // Switch to a new block
       if (leftover > 0) {
         // Fill the trailer (literal below relies on kHeaderSize being 7)
@@ -58,11 +60,12 @@ Status Writer::AddRecord(const Slice& slice) {
     // Invariant: we never leave < kHeaderSize bytes in a block.
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
 
+    //计算block剩余大小，以及本次log record可写入数据长度
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
-    const bool end = (left == fragment_length);
+    const bool end = (left == fragment_length); //两者相等，表明写完
     if (begin && end) {
       type = kFullType;
     } else if (begin) {
@@ -73,6 +76,7 @@ Status Writer::AddRecord(const Slice& slice) {
       type = kMiddleType;
     }
 
+    //调用EmitPhysicalRecord函数，append日志；并更新指针、剩余长度和begin标记
     s = EmitPhysicalRecord(type, ptr, fragment_length);
     ptr += fragment_length;
     left -= fragment_length;
@@ -92,11 +96,13 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
   buf[6] = static_cast<char>(t);
 
   // Compute the crc of the record type and the payload.
+  // 计算record type和payload的CRC校验值
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, n);
-  crc = crc32c::Mask(crc);                 // Adjust for storage
+  crc = crc32c::Mask(crc);                 // 空间调整 Adjust for storage
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload
+  // 写入payload，flush并更新block的当前偏移
   Status s = dest_->Append(Slice(buf, kHeaderSize));
   if (s.ok()) {
     s = dest_->Append(Slice(ptr, n));

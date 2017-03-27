@@ -176,11 +176,13 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
   assert(direction_ == kForward);
   do {
     ParsedInternalKey ikey;
+    // 确保iter_->key()的sequence <= 遍历指定的sequence 
     if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
       switch (ikey.type) {
         case kTypeDeletion:
           // Arrange to skip all upcoming entries for this key since
           // they are hidden by this deletion.
+          // 保存key到skip中，并设置skipping=true
           SaveKey(ikey.user_key, skip);
           skipping = true;
           break;
@@ -188,6 +190,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           if (skipping &&
               user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
             // Entry hidden
+            // 这事一个被删除覆盖的entry，或者user key比指定的key小，跳过
           } else {
             valid_ = true;
             saved_key_.clear();
@@ -196,9 +199,10 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           break;
       }
     }
-    iter_->Next();
+    iter_->Next(); // 继续查找下一个entry
   } while (iter_->Valid());
   saved_key_.clear();
+  // 到这里表明已经找到最后了，没有符合的entry
   valid_ = false;
 }
 
@@ -272,12 +276,13 @@ void DBIter::FindPrevUserEntry() {
 }
 
 void DBIter::Seek(const Slice& target) {
-  direction_ = kForward;
-  ClearSavedValue();
+  direction_ = kForward; // 向前seek
+  ClearSavedValue(); // 清空saved value和saved key，并根据target设置saved key
   saved_key_.clear();
-  AppendInternalKey(
+  AppendInternalKey( // kValueTypeForSeek(1) > kDeleteType(0)
       &saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
-  iter_->Seek(saved_key_);
+  iter_->Seek(saved_key_); // iter seek 到saved key
+  //可以定位到合法的entry，还需要跳过Delete的entry
   if (iter_->Valid()) {
     FindNextUserEntry(false, &saved_key_ /* temporary storage */);
   } else {

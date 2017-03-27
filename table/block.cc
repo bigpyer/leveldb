@@ -50,6 +50,7 @@ Block::~Block() {
 //
 // If any errors are detected, returns NULL.  Otherwise, returns a
 // pointer to the key delta (just past the three decoded values).
+// 从字符串[p,limit)解析出key的前缀长度，key前缀之后的字符串长度和value的长度，这三个vint32值。
 static inline const char* DecodeEntry(const char* p, const char* limit,
                                       uint32_t* shared,
                                       uint32_t* non_shared,
@@ -81,8 +82,8 @@ class Block::Iter : public Iterator {
   uint32_t const num_restarts_; // 重启点个数 Number of uint32_t entries in restart array
 
   // current_ is offset in data_ of current entry.  >= restarts_ if !Valid
-  uint32_t current_;
-  uint32_t restart_index_;  // Index of restart block in which current_ falls
+  uint32_t current_; // 当前entry在data中的偏移，>= restarts_表示非法
+  uint32_t restart_index_;  // Index of restart block in which current_ falls current_所在的重启点的index
   std::string key_;
   Slice value_;
   Status status_;
@@ -145,9 +146,10 @@ class Block::Iter : public Iterator {
     assert(Valid());
 
     // Scan backwards to a restart point before current_
+    // 回到current_之前的重启点，然后向后直到current_
     const uint32_t original = current_;
     while (GetRestartPoint(restart_index_) >= original) {
-      if (restart_index_ == 0) {
+      if (restart_index_ == 0) {//到第一个entry了，标记为invalid状态
         // No more entries
         current_ = restarts_;
         restart_index_ = num_restarts_;
@@ -156,15 +158,17 @@ class Block::Iter : public Iterator {
       restart_index_--;
     }
 
-    SeekToRestartPoint(restart_index_);
+    SeekToRestartPoint(restart_index_); // 根据restart index定位到具体的k/v对
     do {
       // Loop until end of current entry hits the start of original entry
+      // 从重启点位置开始向后遍历，直到遇到origin前面的那个kv对子
     } while (ParseNextKey() && NextEntryOffset() < original);
   }
 
   virtual void Seek(const Slice& target) {
     // Binary search in restart array to find the last restart point
     // with a key < target
+    // 二分查找，找到key < target的最后一个重启点
     uint32_t left = 0;
     uint32_t right = num_restarts_ - 1;
     while (left < right) {
@@ -227,7 +231,7 @@ class Block::Iter : public Iterator {
     current_ = NextEntryOffset(); //(value_.data() + value_.size()) - data
     const char* p = data_ + current_;
     const char* limit = data_ + restarts_;  // Restarts come right after data
-    if (p >= limit) {
+    if (p >= limit) { //entry到头了,标记为invalid
       // No more entries to return.  Mark as invalid.
       current_ = restarts_;
       restart_index_ = num_restarts_;
@@ -235,6 +239,7 @@ class Block::Iter : public Iterator {
     }
 
     // Decode next entry
+    // 解析出错则设置错误状态，记录错误并返回false，解析成功则根据信息组成key和value，并更新重启点index。
     uint32_t shared, non_shared, value_length;
     p = DecodeEntry(p, limit, &shared, &non_shared, &value_length);
     if (p == NULL || key_.size() < shared) {
@@ -246,7 +251,7 @@ class Block::Iter : public Iterator {
       value_ = Slice(p + non_shared, value_length);
       while (restart_index_ + 1 < num_restarts_ &&
              GetRestartPoint(restart_index_ + 1) < current_) {
-        ++restart_index_;
+        ++restart_index_; //更新重启点index
       }
       return true;
     }

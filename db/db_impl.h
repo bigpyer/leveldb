@@ -119,9 +119,9 @@ class DBImpl : public DB {
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Constant after construction
-  Env* const env_;
-  const InternalKeyComparator internal_comparator_;
-  const InternalFilterPolicy internal_filter_policy_;
+  Env* const env_; // 环境，封装了系统相关的文件操作、线程等等
+  const InternalKeyComparator internal_comparator_; // key comparator
+  const InternalFilterPolicy internal_filter_policy_; // filter policy
   const Options options_;  // options_.comparator == &internal_comparator_
   bool owns_info_log_;
   bool owns_cache_;
@@ -131,18 +131,19 @@ class DBImpl : public DB {
   TableCache* table_cache_;
 
   // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
+  // 锁db文件，persistent state，直到leveldb进程结束
   FileLock* db_lock_;
 
   // State below is protected by mutex_
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
-  port::CondVar bg_cv_;          // Signalled when background work finishes
+  port::CondVar bg_cv_;          // 在background work结束时激发 Signalled when background work finishes
   MemTable* mem_;
   MemTable* imm_;                // Memtable being compacted
   port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
-  WritableFile* logfile_;
-  uint64_t logfile_number_;
-  log::Writer* log_;
+  WritableFile* logfile_; // log文件
+  uint64_t logfile_number_; // log文件编号
+  log::Writer* log_; // log writer
   uint32_t seed_;                // For sampling.
 
   // Queue of writers.
@@ -153,10 +154,10 @@ class DBImpl : public DB {
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
-  std::set<uint64_t> pending_outputs_;
+  std::set<uint64_t> pending_outputs_; //待compact的文件列表，保护以防误删
 
   // Has a background compaction been scheduled or is running?
-  bool bg_compaction_scheduled_;
+  bool bg_compaction_scheduled_; // 是否有后台compaction在调度或者运行
 
   // Information for a manual compaction
   struct ManualCompaction {
@@ -166,9 +167,9 @@ class DBImpl : public DB {
     const InternalKey* end;     // NULL means end of key range
     InternalKey tmp_storage;    // Used to keep track of compaction progress
   };
-  ManualCompaction* manual_compaction_;
+  ManualCompaction* manual_compaction_; // 手动compaction信息
 
-  VersionSet* versions_;
+  VersionSet* versions_; // 多版本version信息
 
   // Have we encountered a background error in paranoid mode?
   Status bg_error_;

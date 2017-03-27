@@ -38,16 +38,17 @@ bool Reader::SkipToInitialBlock() {
   uint64_t block_start_location = initial_offset_ - offset_in_block;
 
   // Don't search a block if we'd be in the trailer
+  // 如果偏移在最后的6byte里，肯定不是一条完整的记录，跳到下一个block
   if (offset_in_block > kBlockSize - 6) {
     offset_in_block = 0;
     block_start_location += kBlockSize;
   }
 
-  end_of_buffer_offset_ = block_start_location;
+  end_of_buffer_offset_ = block_start_location; // 设置读取偏移
 
   // Skip to start of first block that can contain the initial record
   if (block_start_location > 0) {
-    Status skip_status = file_->Skip(block_start_location);
+    Status skip_status = file_->Skip(block_start_location); //跳转
     if (!skip_status.ok()) {
       ReportDrop(block_start_location, skip_status);
       return false;
@@ -58,7 +59,9 @@ bool Reader::SkipToInitialBlock() {
 }
 
 bool Reader::ReadRecord(Slice* record, std::string* scratch) {
+  //当前偏移 < 指定偏移，需要seek
   if (last_record_offset_ < initial_offset_) {
+    //首先计算出在block内的偏移位置，然后圆整到要读取block的起始位置。开始读取日志的时候都要保证读取的是完整的block，这就是调整的目的。
     if (!SkipToInitialBlock()) {
       return false;
     }
@@ -66,13 +69,14 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
   scratch->clear();
   record->clear();
+  //当前是否在fragment内，也就是遇到了FIRST类型的record
   bool in_fragmented_record = false;
   // Record offset of the logical record that we're reading
   // 0 is a dummy value to make compilers happy
-  uint64_t prospective_record_offset = 0;
+  uint64_t prospective_record_offset = 0; // 我们正在读取的逻辑record的偏移
 
   Slice fragment;
-  while (true) {
+  while (true) {//进入到while(true)循环，直到读取到KLastType或者KFullType的record，或者到了文件结尾。从日志文件读取完整的record是ReadPhysicalRecord函数完成的。
     const unsigned int record_type = ReadPhysicalRecord(&fragment);
 
     // ReadPhysicalRecord may have only had an empty trailer remaining in its
@@ -106,9 +110,9 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
           }
         }
         prospective_record_offset = physical_record_offset;
-        scratch->clear();
+        scratch->clear(); // 清空scratch，读取成功不需要返回scratch数据
         *record = fragment;
-        last_record_offset_ = prospective_record_offset;
+        last_record_offset_ = prospective_record_offset; // 更新last record offset
         return true;
 
       case kFirstType:
