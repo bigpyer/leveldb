@@ -44,19 +44,20 @@ struct TableBuilder::Rep {
 
   std::string compressed_output; // 压缩后的data block信息，临时存储，写入后即被清空
 
+  //Filter block是存储的过滤器信息，它会存储{key, 对应data block在sstable的偏移值}，不一定是完全精确的，以快速定位给定key是否在data block中。
   Rep(const Options& opt, WritableFile* f)
-      : options(opt),
-        index_block_options(opt),
-        file(f),
-        offset(0),
-        data_block(&options),
-        index_block(&index_block_options),
-        num_entries(0),
-        closed(false),
+      : options(opt), // data block选项
+        index_block_options(opt), // index block选项
+        file(f), // sstable文件
+        offset(0), // 要写入data block在sstable文件中的偏移，初始0
+        data_block(&options), // 当前操作的data block
+        index_block(&index_block_options), // sstable的index block
+        num_entries(0), // 当前data block的个数，初始0
+        closed(false), // 调用了Finish() or Abandon()，初始false
         filter_block(opt.filter_policy == NULL ? NULL
-                     : new FilterBlockBuilder(opt.filter_policy)),
-        pending_index_entry(false) {
-    index_block_options.block_restart_interval = 1;
+                     : new FilterBlockBuilder(opt.filter_policy)), // 根据filter数据快速定位key是否在block中
+        pending_index_entry(false) { // 添加到index block的data block的信息
+    index_block_options.block_restart_interval = 1; // 压缩后的data block，临时存储，写入后即被清空
   }
 };
 

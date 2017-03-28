@@ -128,29 +128,29 @@ class DBImpl : public DB {
   const std::string dbname_;
 
   // table_cache_ provides its own synchronization
-  TableCache* table_cache_;
+  TableCache* table_cache_; // 线程安全
 
   // Lock over the persistent DB state.  Non-NULL iff successfully acquired.
   // 锁db文件，persistent state，直到leveldb进程结束
   FileLock* db_lock_;
 
   // State below is protected by mutex_
-  port::Mutex mutex_;
+  port::Mutex mutex_; // 互斥锁
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;          // 在background work结束时激发 Signalled when background work finishes
   MemTable* mem_;
   MemTable* imm_;                // Memtable being compacted
-  port::AtomicPointer has_imm_;  // So bg thread can detect non-NULL imm_
+  port::AtomicPointer has_imm_;  // BGThread用来检查是否是非NULL的imm_ So bg thread can detect non-NULL imm_
   WritableFile* logfile_; // log文件
   uint64_t logfile_number_; // log文件编号
   log::Writer* log_; // log writer
   uint32_t seed_;                // For sampling.
 
   // Queue of writers.
-  std::deque<Writer*> writers_;
+  std::deque<Writer*> writers_; // writers队列
   WriteBatch* tmp_batch_;
-
-  SnapshotList snapshots_;
+ 
+  SnapshotList snapshots_; // snapshot列表
 
   // Set of table files to protect from deletion because they are
   // part of ongoing compactions.
@@ -172,7 +172,7 @@ class DBImpl : public DB {
   VersionSet* versions_; // 多版本version信息
 
   // Have we encountered a background error in paranoid mode?
-  Status bg_error_;
+  Status bg_error_; // paranoid mode下是否有后台错误
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".
@@ -189,7 +189,7 @@ class DBImpl : public DB {
       this->bytes_written += c.bytes_written;
     }
   };
-  CompactionStats stats_[config::kNumLevels];
+  CompactionStats stats_[config::kNumLevels]; // compaction
 
   // No copying allowed
   DBImpl(const DBImpl&);

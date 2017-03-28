@@ -62,6 +62,7 @@ Status Footer::DecodeFrom(Slice* input) {
   return result;
 }
 
+// 根据handle指定的偏移和大小，读取block内容，type和crc32值，其中敞亮kBlockTrailerSize=5+1byte的type和4bytes的crc32
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
@@ -99,7 +100,7 @@ Status ReadBlock(RandomAccessFile* file,
 
   switch (data[n]) {
     case kNoCompression:
-      if (data != buf) {
+      if (data != buf) { // 文件自己管理，cacheable等标记设置为false
         // File implementation gave us pointer to some other data.
         // Use it directly under the assumption that it will be live
         // while the file is open.
@@ -107,7 +108,7 @@ Status ReadBlock(RandomAccessFile* file,
         result->data = Slice(data, n);
         result->heap_allocated = false;
         result->cachable = false;  // Do not double-cache
-      } else {
+      } else { // 读取者自己管理，标记设置为true
         result->data = Slice(buf, n);
         result->heap_allocated = true;
         result->cachable = true;

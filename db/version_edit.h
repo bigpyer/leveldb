@@ -30,7 +30,7 @@ class VersionEdit {
   VersionEdit() { Clear(); }
   ~VersionEdit() { }
 
-  void Clear();
+  void Clear(); // 清空信息
 
   void SetComparatorName(const Slice& name) {
     has_comparator_ = true;
@@ -72,11 +72,14 @@ class VersionEdit {
   }
 
   // Delete the specified "file" from the specified "level".
+  // 从指定的level删除文件
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
   }
 
+  //将信息Encode到一个string中
   void EncodeTo(std::string* dst) const;
+  //从Slice中Decode出DB元信息的内容
   Status DecodeFrom(const Slice& src);
 
   std::string DebugString() const;
@@ -86,20 +89,20 @@ class VersionEdit {
 
   typedef std::set< std::pair<int, uint64_t> > DeletedFileSet;
 
-  std::string comparator_;
-  uint64_t log_number_;
-  uint64_t prev_log_number_;
-  uint64_t next_file_number_;
-  SequenceNumber last_sequence_;
-  bool has_comparator_;
-  bool has_log_number_;
+  std::string comparator_; // key comparator名字
+  uint64_t log_number_; // 日志编号
+  uint64_t prev_log_number_; // 前一个日志编号
+  uint64_t next_file_number_; // 下一个文件编号
+  SequenceNumber last_sequence_; // 上一个seq
+  bool has_comparator_; // 是否有comparator
+  bool has_log_number_; // 是否有log number
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
 
-  std::vector< std::pair<int, InternalKey> > compact_pointers_;
-  DeletedFileSet deleted_files_;
-  std::vector< std::pair<int, FileMetaData> > new_files_;
+  std::vector< std::pair<int, InternalKey> > compact_pointers_; // compact点
+  DeletedFileSet deleted_files_; // 删除文件集合
+  std::vector< std::pair<int, FileMetaData> > new_files_; // 新文件集合
 };
 
 }  // namespace leveldb

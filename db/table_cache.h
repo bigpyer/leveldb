@@ -48,10 +48,10 @@ class TableCache {
   void Evict(uint64_t file_number);
 
  private:
-  Env* const env_;
-  const std::string dbname_;
+  Env* const env_; // 用来操作文件
+  const std::string dbname_; // db名
   const Options* options_;
-  Cache* cache_;
+  Cache* cache_; // LRUCache
 
   Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**);
 };

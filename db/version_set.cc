@@ -163,6 +163,8 @@ bool SomeFileOverlapsRange(
 // is the largest key that occurs in the file, and value() is an
 // 16-byte value containing the file number and file size, both
 // encoded using EncodeFixed64.
+// 给定一个version/level对，生成该level内的文件信息。对于给定的entry，key()返回的是文件中所包含的最大的key，value()返回的是|file number(8byte)|file size(8byte0)|串。
+// InternalKeyComparator用于key的比较，vector<FileMetaData*>*,指向version的所有sstable文件列表
 class Version::LevelFileNumIterator : public Iterator {
  public:
   LevelFileNumIterator(const InternalKeyComparator& icmp,
@@ -197,7 +199,7 @@ class Version::LevelFileNumIterator : public Iterator {
     assert(Valid());
     return (*flist_)[index_]->largest.Encode();
   }
-  Slice value() const {
+  Slice value() const { // 根据|number|size|的格式Fixed int压缩 
     assert(Valid());
     EncodeFixed64(value_buf_, (*flist_)[index_]->number);
     EncodeFixed64(value_buf_+8, (*flist_)[index_]->file_size);
@@ -335,6 +337,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
   }
 }
 
+//如果本次Get不止seek了一个文件（仅会发生在level 0的情况），就将搜索的第一个文件保存在stats中。如果stat有数据返回，表明本次读取在搜索到包含key的sstable文件之前，还做了其它无谓的搜索。这个结果将用在UpdateStats()中。
 Status Version::Get(const ReadOptions& options,
                     const LookupKey& k,
                     std::string* value,
@@ -346,12 +349,13 @@ Status Version::Get(const ReadOptions& options,
 
   stats->seek_file = NULL;
   stats->seek_file_level = -1;
-  FileMetaData* last_file_read = NULL;
-  int last_file_read_level = -1;
+  FileMetaData* last_file_read = NULL; // 在找到>1个文件时，读取时记录上一个
+  int last_file_read_level = -1; // 这仅发生在level 0的情况下
 
   // We can search level-by-level since entries never hop across
   // levels.  Therefore we are guaranteed that if we find data
   // in an smaller level, later levels are irrelevant.
+  // 从0开始遍历所有的level，依次查找。因为entry不会跨越level，因此如果在某个level中找到了entry，那么就无需在后面的level中查找了
   std::vector<FileMetaData*> tmp;
   FileMetaData* tmp2;
   for (int level = 0; level < config::kNumLevels; level++) {

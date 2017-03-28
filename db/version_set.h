@@ -299,25 +299,26 @@ class VersionSet {
 
   void AppendVersion(Version* v);
 
-  Env* const env_;
+  Env* const env_; //操作系统封装
   const std::string dbname_;
   const Options* const options_;
-  TableCache* const table_cache_;
+  TableCache* const table_cache_; // table cache
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
-  uint64_t manifest_file_number_;
+  uint64_t next_file_number_; // log文件编号
+  uint64_t manifest_file_number_; //manifest文件编号
   uint64_t last_sequence_;
-  uint64_t log_number_;
+  uint64_t log_number_; // log编号
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
-  Version dummy_versions_;  // Head of circular doubly-linked list of versions.
+  Version dummy_versions_;  // version双向链表head. Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+  // level下一次compaction的开始key，空字符串或者合法的InternalKey
   std::string compact_pointer_[config::kNumLevels];
 
   // No copying allowed

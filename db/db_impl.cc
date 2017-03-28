@@ -174,13 +174,15 @@ DBImpl::~DBImpl() {
   }
 }
 
+// 判断db是否存在的依据是<db name>/CURRENT文件是否存在。
 Status DBImpl::NewDB() {
+  // 首先生产DB元信息，设置comparator名，以及log文件编号、文件编号，以及seq no。
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
-
+  // 生产MANIFEST文件，将db元信息写入MANIFEST文件。
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
   Status s = env_->NewWritableFile(manifest, &file);
@@ -199,6 +201,7 @@ Status DBImpl::NewDB() {
   delete file;
   if (s.ok()) {
     // Make "CURRENT" file that points to the new manifest file.
+    // 如果成功，就把MANIFEST文件名写入到CURRENT文件中
     s = SetCurrentFile(env_, dbname_, 1);
   } else {
     env_->DeleteFile(manifest);
@@ -271,6 +274,8 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 }
 
+//如果调用成功，则设置VersionEdit
+//首先处理创建flag，比如存在就返回失败，然后是尝试从已经存在的sstable文件恢复db；最后如果发现有大于原信息记录的log编号的log文件，则需要回访log，更新db数据。
 Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   mutex_.AssertHeld();
 
@@ -306,6 +311,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   if (!s.ok()) {
     return s;
   }
+  // 这里先找出所有满足条件的log文件: 比manifest文件记录的log编号更新。
   SequenceNumber max_sequence(0);
 
   // Recover from all newer log files than the ones named in the
@@ -318,7 +324,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   const uint64_t min_log = versions_->LogNumber();
   const uint64_t prev_log = versions_->PrevLogNumber();
   std::vector<std::string> filenames;
-  s = env_->GetChildren(dbname_, &filenames);
+  s = env_->GetChildren(dbname_, &filenames); // 列出目录内的所有文件
   if (!s.ok()) {
     return s;
   }
@@ -327,7 +333,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   uint64_t number;
   FileType type;
   std::vector<uint64_t> logs;
-  for (size_t i = 0; i < filenames.size(); i++) {
+  for (size_t i = 0; i < filenames.size(); i++) { // 检查log文件是否笔min log更新
     if (ParseFileName(filenames[i], &number, &type)) {
       expected.erase(number);
       if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
@@ -342,6 +348,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
+  // 找到log文件后，首先排序，保证按照生成顺序，依次回放log。并把db原信息的变动追加到edit中返回
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
@@ -353,6 +360,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
     // The previous incarnation may not have written any MANIFEST
     // records after allocating this log number.  So we manually
     // update the file number allocation counter in VersionSet.
+    // 前一版可能在生成该log编号后没有记录在MANIFEST中,所以这里我们手动更新VersionSet中的文件编号计数器
     versions_->MarkFileNumberUsed(logs[i]);
   }
 
@@ -1498,6 +1506,8 @@ Status DB::Open(const Options& options, const std::string& dbname,
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;
+  // 从已存在的db文件恢复db数据，根据CURRENT记录的MANIFEST文件读取db元信息；这通过调用VersionSet::Recover()完成。
+  // 然后过滤出那些最近的更新log，前一个版本可能新加了这些log，但并没有记录在MANIFEST中。然后依次根据时间顺序，调用DBImpl::RecoverLogFile()从旧到新回放这些操作log。回放log时可能会修改db元信息，比如dump了新的level 0文件，因此它将返回一个VersionEdit对象，记录db元信息的变动。
   Status s = impl->Recover(&edit, &save_manifest);
   if (s.ok() && impl->mem_ == NULL) {
     // Create new log and a corresponding memtable.
@@ -1514,11 +1524,13 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->mem_->Ref();
     }
   }
+  // 如果DBImpl::Recover()返回成功，就执行VersionSet::LogAndApply()应用VersionEdit，并保存当前的DB信息到新的MANIFEST文件中。
   if (s.ok() && save_manifest) {
     edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
   }
+  // 最后删除一些过期文件，并检查是否需要执行compaction，如果需要，就启动后台线程执行。
   if (s.ok()) {
     impl->DeleteObsoleteFiles();
     impl->MaybeScheduleCompaction();

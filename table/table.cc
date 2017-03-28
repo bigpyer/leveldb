@@ -40,7 +40,7 @@ Status Table::Open(const Options& options,
                    uint64_t size,
                    Table** table) {
   *table = NULL;
-  if (size < Footer::kEncodedLength) {
+  if (size < Footer::kEncodedLength) { // 文件太短
     return Status::Corruption("file is too short to be an sstable");
   }
 
@@ -100,10 +100,13 @@ void Table::ReadMeta(const Footer& footer) {
     opt.verify_checksums = true;
   }
   BlockContents contents;
+  //调用ReadBlock，读取meta的内容
   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
     // Do not propagate errors since meta info is not needed for operation
+    // 失败了也不报错，因为没有meta信息也没关系
     return;
   }
+  // 根据content构建Block，找到指定的filter，如果找到了就调用ReadFilter构建filter对象。
   Block* meta = new Block(contents);
 
   Iterator* iter = meta->NewIterator(BytewiseComparator());
@@ -117,6 +120,7 @@ void Table::ReadMeta(const Footer& footer) {
   delete meta;
 }
 
+// 根据指定的偏移和大小，读取filter
 void Table::ReadFilter(const Slice& filter_handle_value) {
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
@@ -134,7 +138,7 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
   if (!ReadBlock(rep_->file, opt, filter_handle, &block).ok()) {
     return;
   }
-  if (block.heap_allocated) {
+  if (block.heap_allocated) { // 需要自行释放内存
     rep_->filter_data = block.data.data();     // Will need to delete later
   }
   rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
@@ -161,6 +165,7 @@ static void ReleaseBlock(void* arg, void* h) {
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
+// 根据参数指明的blockdata，返回一个iterator对象，调用者就可以通过这个iterator对象百年历blockdata存储的kv对，其中用到了LRUCache。
 Iterator* Table::BlockReader(void* arg,
                              const ReadOptions& options,
                              const Slice& index_value) {
@@ -178,18 +183,18 @@ Iterator* Table::BlockReader(void* arg,
   if (s.ok()) {
     BlockContents contents;
     if (block_cache != NULL) {
-      char cache_key_buffer[16];
+      char cache_key_buffer[16]; // cache key的格式为table.cache_id + offset
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
       EncodeFixed64(cache_key_buffer+8, handle.offset());
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
-      cache_handle = block_cache->Lookup(key);
-      if (cache_handle != NULL) {
+      cache_handle = block_cache->Lookup(key); // 尝试从LRU cache中查找
+      if (cache_handle != NULL) { // 找到则直接取值
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
-      } else {
+      } else { // 否则直接从文件读取
         s = ReadBlock(table->rep_->file, options, handle, &contents);
         if (s.ok()) {
           block = new Block(contents);
-          if (contents.cachable && options.fill_cache) {
+          if (contents.cachable && options.fill_cache) { // 尝试添加到cache中
             cache_handle = block_cache->Insert(
                 key, block, block->size(), &DeleteCachedBlock);
           }
@@ -204,7 +209,7 @@ Iterator* Table::BlockReader(void* arg,
   }
 
   Iterator* iter;
-  if (block != NULL) {
+  if (block != NULL) { //如果读取到了block，调用Block::NewIterator接口创建Iterator，如果cache handle为NULL，则注册DeleteBlock，否则创建ReleaseBlock，事后处理。
     iter = block->NewIterator(table->rep_->options.comparator);
     if (cache_handle == NULL) {
       iter->RegisterCleanup(&DeleteBlock, block, NULL);
@@ -227,17 +232,18 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
+  // 首先根据传入的key定位数据，这需要indexblock的Iterator
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
-  if (iiter->Valid()) {
+  if (iiter->Valid()) {// 如果key是合法的，取出其filter指针，如果使用了filter，则检查key是否存在，这可以快速判断，提升效率。
     Slice handle_value = iiter->value();
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
     if (filter != NULL &&
         handle.DecodeFrom(&handle_value).ok() &&
-        !filter->KeyMayMatch(handle.offset(), k)) {
+        !filter->KeyMayMatch(handle.offset(), k)) { // key不存在
       // Not found
-    } else {
+    } else { // 否则就要读取block，并查找其k/v对
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
@@ -254,7 +260,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k,
   return s;
 }
 
-
+// 在table中找到第一个>=指定key的k/v对，然后返回其value在sstable文件中的偏移。
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
   Iterator* index_iter =
       rep_->index_block->NewIterator(rep_->options.comparator);
@@ -279,7 +285,7 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
     result = rep_->metaindex_handle.offset();
   }
   delete index_iter;
-  return result;
+  return result; // index_iter是合法的值，并且Decode成功，返回结果offset。
 }
 
 }  // namespace leveldb
