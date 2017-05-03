@@ -39,6 +39,7 @@ class WritableFile;
 // Return the smallest index i such that files[i]->largest >= key.
 // Return files.size() if there is no such file.
 // REQUIRES: "files" contains a sorted list of non-overlapping files.
+// 不重叠文件列表
 extern int FindFile(const InternalKeyComparator& icmp,
                     const std::vector<FileMetaData*>& files,
                     const Slice& key);
@@ -61,11 +62,16 @@ class Version {
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
+  // 追加一系列iterator到 @*iters中，将在merge到一起时生成该Version的内容
+  // 要求: Version已经保存了(见VersionSet::SaveTo)
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
+  // 给定@key查找value，如果找到保存在@*val并返回OK
+  // 否则返回non-OK，设置@stats
+  // 要求:lock未被占用
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
@@ -76,6 +82,7 @@ class Version {
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
+  // 把@stats加入到当前状态中，如果需要触发新的compaction返回true
   bool UpdateStats(const GetStats& stats);
 
   // Record a sample of bytes read at the specified internal key.
@@ -98,7 +105,7 @@ class Version {
       const InternalKey* end,           // NULL means after all keys
       std::vector<FileMetaData*>* inputs);
 
-  // Returns true iff some file in the specified level overlaps
+  // Returns true if some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==NULL represents a key smaller than all keys in the DB.
   // largest_user_key==NULL represents a key largest than all keys in the DB.
@@ -111,6 +118,7 @@ class Version {
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
+  //指定level上的sst文件个数
   int NumFiles(int level) const { return files_[level].size(); }
 
   // Return a human readable string that describes this version's contents.
@@ -190,9 +198,11 @@ class VersionSet {
   Version* current() const { return current_; }
 
   // Return the current manifest file number
+  // 当前的MANIFEST文件号
   uint64_t ManifestFileNumber() const { return manifest_file_number_; }
 
   // Allocate and return a new file number
+  // 分配并返回新的文件编号
   uint64_t NewFileNumber() { return next_file_number_++; }
 
   // Arrange to reuse "file_number" unless a newer file number has
@@ -205,9 +215,11 @@ class VersionSet {
   }
 
   // Return the number of Table files at the specified level.
+  // 返回指定level的文件个数
   int NumLevelFiles(int level) const;
 
   // Return the combined file size of all files at the specified level.
+  // 返回指定level中所有sstable文件大小的和
   int64_t NumLevelBytes(int level) const;
 
   // Return the last sequence number.
@@ -223,10 +235,12 @@ class VersionSet {
   void MarkFileNumberUsed(uint64_t number);
 
   // Return the current log file number.
+  // 返回当前log文件编号
   uint64_t LogNumber() const { return log_number_; }
 
   // Return the log file number for the log file that is currently
   // being compacted, or zero if there is no such log file.
+  // 返回正在compact的log文件编号，如果没有返回0
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
   // Pick level and inputs for a new compaction.
@@ -260,6 +274,7 @@ class VersionSet {
 
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
+  // 获取函数，把所有version的所有level的文件加入到@live中
   void AddLiveFiles(std::set<uint64_t>* live);
 
   // Return the approximate offset in the database of the data for

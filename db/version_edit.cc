@@ -38,34 +38,37 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
+//MANIFEST format
 void VersionEdit::EncodeTo(std::string* dst) const {
-  if (has_comparator_) {
+  if (has_comparator_) { //记录Comparator
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
   }
-  if (has_log_number_) {
+  if (has_log_number_) { //记录Log Number
     PutVarint32(dst, kLogNumber);
     PutVarint64(dst, log_number_);
   }
-  if (has_prev_log_number_) {
+  if (has_prev_log_number_) { //记录Prev Log Number，现在已经废弃，一般为0
     PutVarint32(dst, kPrevLogNumber);
     PutVarint64(dst, prev_log_number_);
   }
-  if (has_next_file_number_) {
+  if (has_next_file_number_) { //记录下一文件序号
     PutVarint32(dst, kNextFileNumber);
     PutVarint64(dst, next_file_number_);
   }
-  if (has_last_sequence_) {
+  if (has_last_sequence_) { //记录最大的sequence num
     PutVarint32(dst, kLastSequence);
     PutVarint64(dst, last_sequence_);
   }
 
+  //记录每一级level下次compaction的起始key
   for (size_t i = 0; i < compact_pointers_.size(); i++) {
     PutVarint32(dst, kCompactPointer);
     PutVarint32(dst, compact_pointers_[i].first);  // level
     PutLengthPrefixedSlice(dst, compact_pointers_[i].second.Encode());
   }
 
+  //记录每一级需要删除的文件
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
        iter != deleted_files_.end();
        ++iter) {
@@ -74,6 +77,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
     PutVarint64(dst, iter->second);  // file number
   }
 
+  //记录每一级有效的sst以及其smallest与largest的key
   for (size_t i = 0; i < new_files_.size(); i++) {
     const FileMetaData& f = new_files_[i].second;
     PutVarint32(dst, kNewFile);

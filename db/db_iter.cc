@@ -170,8 +170,11 @@ void DBIter::Next() {
   FindNextUserEntry(true, &saved_key_);
 }
 
+//@skipping表明是否要跳过sequence更小的entry
+//@skip临时存储空间，保存seek时要跳过的key
 void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
   // Loop until we hit an acceptable entry to yield
+  // 循环直到找到合适的entry，direction必须是kForward  
   assert(iter_->Valid());
   assert(direction_ == kForward);
   do {
@@ -182,6 +185,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
         case kTypeDeletion:
           // Arrange to skip all upcoming entries for this key since
           // they are hidden by this deletion.
+          // 对于该key，跳过后面遇到的所有entry，他们被这次删除覆盖了
           // 保存key到skip中，并设置skipping=true
           SaveKey(ikey.user_key, skip);
           skipping = true;
@@ -190,8 +194,8 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           if (skipping &&
               user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
             // Entry hidden
-            // 这事一个被删除覆盖的entry，或者user key比指定的key小，跳过
-          } else {
+            // 这是一个被删除覆盖的entry，或者user key比指定的key小，跳过
+          } else { // 找到，清空saved key，iter_ 已定位到正确的entry
             valid_ = true;
             saved_key_.clear();
             return;
@@ -234,7 +238,7 @@ void DBIter::Prev() {
 }
 
 void DBIter::FindPrevUserEntry() {
-  assert(direction_ == kReverse);
+  assert(direction_ == kReverse); // 确保是kReverse方向
 
   ValueType value_type = kTypeDeletion;
   if (iter_->Valid()) {
@@ -244,8 +248,11 @@ void DBIter::FindPrevUserEntry() {
         if ((value_type != kTypeDeletion) &&
             user_comparator_->Compare(ikey.user_key, saved_key_) < 0) {
           // We encountered a non-deleted value in entries for previous keys,
+          // 我们遇到了前一个key的一个未被删除的entry，跳出循环
           break;
         }
+        // 根据类型，如果是Deletion则清空saved key和saved value
+        // 否则，把iter_的user key和value赋给saved key和saved value
         value_type = ikey.type;
         if (value_type == kTypeDeletion) {
           saved_key_.clear();
