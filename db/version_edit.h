@@ -59,6 +59,8 @@ class VersionEdit {
   // Add the specified file at the specified number.
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
+  // 添加sstable文件信息，要求DB元信息还没有写入manifest文件
+  // @level: sst文件层数 @file: 文件编号 @file_size: 文件大小 @smallest: sst文件包含k/v对的最小key @largest: sst文件包含k/v对的最大key
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,

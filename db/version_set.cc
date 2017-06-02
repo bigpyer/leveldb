@@ -86,7 +86,7 @@ Version::~Version() {
   }
 }
 
-//传入的sstable文件列表是有序的,使用二分查找获取sst文件下标
+//传入的sstable文件列表是有序的,使用二分查找获取第一个文件最大key大于key的sst文件下标
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files,
              const Slice& key) {
@@ -108,6 +108,7 @@ int FindFile(const InternalKeyComparator& icmp,
   return right;
 }
 
+//比文件最大key还要大
 static bool AfterFile(const Comparator* ucmp,
                       const Slice* user_key, const FileMetaData* f) {
   // NULL user_key occurs before all keys and is therefore never after *f
@@ -115,6 +116,7 @@ static bool AfterFile(const Comparator* ucmp,
           ucmp->Compare(*user_key, f->largest.user_key()) > 0);
 }
 
+//比文件最小key还要小
 static bool BeforeFile(const Comparator* ucmp,
                        const Slice* user_key, const FileMetaData* f) {
   // NULL user_key occurs after all keys and is therefore never before *f
@@ -129,9 +131,9 @@ bool SomeFileOverlapsRange(
     const Slice* smallest_user_key,
     const Slice* largest_user_key) {
   const Comparator* ucmp = icmp.user_comparator();
+  // 乱序，可能相交的文件集合，依次查找
   if (!disjoint_sorted_files) {
     // Need to check against all files
-    // 乱序，可能相交的文件集合，依次查找
     for (size_t i = 0; i < files.size(); i++) {
       const FileMetaData* f = files[i];
       if (AfterFile(ucmp, smallest_user_key, f) ||
@@ -158,7 +160,7 @@ bool SomeFileOverlapsRange(
     return false;
   }
 
-  return !BeforeFile(ucmp, largest_user_key, files[index]);
+  return !BeforeFile(ucmp, largest_user_key, files[index]); // 保证在largest_user_key之后
 }
 
 // An internal iterator.  For a given version/level pair, yields

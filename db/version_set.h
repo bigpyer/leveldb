@@ -146,7 +146,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  std::vector<FileMetaData*> files_[config::kNumLevels]; // sstable文件列表
+  std::vector<FileMetaData*> files_[config::kNumLevels]; // [level][sstable file list]二维数组
 
   // Next file to compact based on seek stats.
   FileMetaData* file_to_compact_; // 下一个要compact的文件
@@ -319,6 +319,8 @@ class VersionSet {
   const Options* const options_;
   TableCache* const table_cache_; // table cache
   const InternalKeyComparator icmp_;
+
+  // db元信息相关
   uint64_t next_file_number_; // log文件编号
   uint64_t manifest_file_number_; //manifest文件编号
   uint64_t last_sequence_;
@@ -326,8 +328,11 @@ class VersionSet {
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily
+  // manifest文件相关
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+
+  // 版本管理
   Version dummy_versions_;  // version双向链表head. Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 

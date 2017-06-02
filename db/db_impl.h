@@ -119,6 +119,7 @@ class DBImpl : public DB {
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Constant after construction
+  // 构造函数初始化后将不再改变
   Env* const env_; // 环境，封装了系统相关的文件操作、线程等等
   const InternalKeyComparator internal_comparator_; // key comparator
   const InternalFilterPolicy internal_filter_policy_; // filter policy
@@ -135,6 +136,7 @@ class DBImpl : public DB {
   FileLock* db_lock_;
 
   // State below is protected by mutex_
+  // 被mutex_包含的状态和成员
   port::Mutex mutex_; // 互斥锁
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;          // 在background work结束时激发 Signalled when background work finishes

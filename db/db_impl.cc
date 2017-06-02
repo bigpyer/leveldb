@@ -552,6 +552,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
+// imm_ -> level0
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != NULL);
@@ -585,6 +586,11 @@ void DBImpl::CompactMemTable() {
   }
 }
 
+// Compact key范围[*begin, *end]的底层存储，删除和被覆盖的版本将会被抛弃
+// 数据会被重新组织，以减少访问开销
+// begin=NULL 被当做db中所有key之前的key
+// end=NULL 被当做db中所有key之后的key
+// db->CompactRange(NULL, NULL)将会compact整个db
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
   int max_level_with_files = 1;
   {
@@ -1359,6 +1365,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // individual write by 1ms to reduce latency variance.  Also,
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
+      // sleep 1秒
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
@@ -1374,6 +1381,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       bg_cv_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
       // There are too many level-0 files.
+      // 阻写
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       bg_cv_.Wait();
     } else {
