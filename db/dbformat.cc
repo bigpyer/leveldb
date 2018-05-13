@@ -117,6 +117,7 @@ void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
                                         std::string* dst) const {
   // We rely on the fact that the code in table.cc does not mind us
   // adjusting keys[].
+  // keys为指向const类型的指针，所以在需要改变keys值的位置需要调用const_cast<Slice*>强制转换获取数组首地址，然后改变数组内的元素
   Slice* mkey = const_cast<Slice*>(keys);
   for (int i = 0; i < n; i++) {
     mkey[i] = ExtractUserKey(keys[i]);
