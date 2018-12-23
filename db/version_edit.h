@@ -10,49 +10,59 @@
 #include <vector>
 #include "db/dbformat.h"
 
-namespace leveldb {
+namespace leveldb
+{
 
 class VersionSet;
 
-struct FileMetaData {
-  int refs;
-  int allowed_seeks;          // Seeks allowed until compaction
-  uint64_t number;
-  uint64_t file_size;         // File size in bytes
-  InternalKey smallest;       // Smallest internal key served by table
-  InternalKey largest;        // Largest internal key served by table
+// sstable的元信息封装成FileMetaData
+struct FileMetaData
+{
+  int refs;             // 引用计数
+  int allowed_seeks;    // compact之前允许seek的数量，Seeks allowed until compaction
+  uint64_t number;      // FileNumber
+  uint64_t file_size;   // 文件的大小，File size in bytes
+  InternalKey smallest; // sstable文件的最小key，Smallest internal key served by table
+  InternalKey largest;  // sstable文件的最大key，Largest internal key served by table
 
-  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
+  FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) {}
 };
 
-class VersionEdit {
- public:
+class VersionEdit
+{
+public:
   VersionEdit() { Clear(); }
-  ~VersionEdit() { }
+  ~VersionEdit() {}
 
   void Clear(); // 清空信息
 
-  void SetComparatorName(const Slice& name) {
+  void SetComparatorName(const Slice &name)
+  {
     has_comparator_ = true;
     comparator_ = name.ToString();
   }
-  void SetLogNumber(uint64_t num) {
+  void SetLogNumber(uint64_t num)
+  {
     has_log_number_ = true;
     log_number_ = num;
   }
-  void SetPrevLogNumber(uint64_t num) {
+  void SetPrevLogNumber(uint64_t num)
+  {
     has_prev_log_number_ = true;
     prev_log_number_ = num;
   }
-  void SetNextFile(uint64_t num) {
+  void SetNextFile(uint64_t num)
+  {
     has_next_file_number_ = true;
     next_file_number_ = num;
   }
-  void SetLastSequence(SequenceNumber seq) {
+  void SetLastSequence(SequenceNumber seq)
+  {
     has_last_sequence_ = true;
     last_sequence_ = seq;
   }
-  void SetCompactPointer(int level, const InternalKey& key) {
+  void SetCompactPointer(int level, const InternalKey &key)
+  {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
 
@@ -63,8 +73,9 @@ class VersionEdit {
   // @level: sst文件层数 @file: 文件编号 @file_size: 文件大小 @smallest: sst文件包含k/v对的最小key @largest: sst文件包含k/v对的最大key
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
-               const InternalKey& smallest,
-               const InternalKey& largest) {
+               const InternalKey &smallest,
+               const InternalKey &largest)
+  {
     FileMetaData f;
     f.number = file;
     f.file_size = file_size;
@@ -75,38 +86,39 @@ class VersionEdit {
 
   // Delete the specified "file" from the specified "level".
   // 从指定的level删除文件
-  void DeleteFile(int level, uint64_t file) {
+  void DeleteFile(int level, uint64_t file)
+  {
     deleted_files_.insert(std::make_pair(level, file));
   }
 
   //将信息Encode到一个string中
-  void EncodeTo(std::string* dst) const;
+  void EncodeTo(std::string *dst) const;
   //从Slice中Decode出DB元信息的内容
-  Status DecodeFrom(const Slice& src);
+  Status DecodeFrom(const Slice &src);
 
   std::string DebugString() const;
 
- private:
+private:
   friend class VersionSet;
 
-  typedef std::set< std::pair<int, uint64_t> > DeletedFileSet;
+  typedef std::set<std::pair<int, uint64_t>> DeletedFileSet;
 
-  std::string comparator_; // key comparator名字
-  uint64_t log_number_; // 日志编号
-  uint64_t prev_log_number_; // 前一个日志编号
-  uint64_t next_file_number_; // 下一个文件编号
+  std::string comparator_;       // key comparator名字
+  uint64_t log_number_;          // 日志编号
+  uint64_t prev_log_number_;     // 前一个日志编号
+  uint64_t next_file_number_;    // 下一个文件编号
   SequenceNumber last_sequence_; // 上一个seq
-  bool has_comparator_; // 是否有comparator
-  bool has_log_number_; // 是否有log number
+  bool has_comparator_;          // 是否有comparator
+  bool has_log_number_;          // 是否有log number
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
 
-  std::vector< std::pair<int, InternalKey> > compact_pointers_; // compact点
-  DeletedFileSet deleted_files_; // 删除文件集合
-  std::vector< std::pair<int, FileMetaData> > new_files_; // 新文件集合
+  std::vector<std::pair<int, InternalKey>> compact_pointers_; // compact点
+  DeletedFileSet deleted_files_;                              // 删除文件集合
+  std::vector<std::pair<int, FileMetaData>> new_files_;       // 新文件集合
 };
 
-}  // namespace leveldb
+} // namespace leveldb
 
-#endif  // STORAGE_LEVELDB_DB_VERSION_EDIT_H_
+#endif // STORAGE_LEVELDB_DB_VERSION_EDIT_H_
